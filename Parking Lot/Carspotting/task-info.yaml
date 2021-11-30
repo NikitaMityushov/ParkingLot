@@ -1,0 +1,456 @@
+type: edu
+custom_name: stage5
+files:
+- name: src/parking/Main.kt
+  visible: true
+  text: |
+    package parking
+
+    fun main() {
+        println("White car has parked.")
+        println("Yellow car left the parking lot.")
+        println("Green car just parked here.")
+    }
+  learner_created: false
+- name: test/ParkingTest.kt
+  visible: false
+  text: |
+    import org.hyperskill.hstest.stage.StageTest
+    import org.hyperskill.hstest.testcase.CheckResult
+    import org.hyperskill.hstest.testcase.TestCase
+
+
+    /** Default testCase. */
+    fun <T> testCase(attach: T, input: String) = TestCase<T>().apply {
+        setInput(input)
+        setAttach(attach)
+    }
+
+    open class InputClue(
+            val input: String,
+            /** Do not show correct output and input. */
+            val isPrivate: Boolean = false,
+            /** Hint will be printed even for private tests. */
+            val hint: String? = null
+    ) {
+
+        /** Ciphers [message] or adds a [hint] to the error if it is not null. */
+        fun toFailure(message: String): CheckResult {
+            if (isPrivate) {
+                // Ciphered
+                return CheckResult.wrong("Incorrect output." + (hint ?: ""))
+            } else {
+                return CheckResult.wrong("$message ${hint ?: ""}")
+            }
+        }
+    }
+
+
+    class OutputClue(input: String, val output: String, isPrivate: Boolean, hint: String?)
+        : InputClue(input, isPrivate, hint) {
+
+        fun compareLines(reply: String): CheckResult {
+            val hisLines = reply.trim().lines()
+            val myLines = output.trim().lines()
+
+            myLines.zip(hisLines).withIndex().forEach { (i, pair) ->
+                val (my, his) = pair
+                if (my.toLowerCase() != his.toLowerCase()) {
+                    return toFailure("Error in line ${i + 1}: \"$his\" instead of \"$my\".")
+                }
+            }
+            // if all common lines are correct, but sizes are different.
+            if (hisLines.size != myLines.size) {
+                return toFailure("Your output contains ${hisLines.size} " +
+                        "lines instead of ${myLines.size}.")
+            }
+            return CheckResult.correct();
+        }
+    }
+
+    fun outputCase(
+            input: String,
+            output: String,
+            isPrivate: Boolean = false,
+            hint: String? = null
+    ) = testCase(OutputClue(input, output, isPrivate, hint), input)
+
+    /** Trim Starts of all lines and trim empty lines. */
+    fun String.trimAllIndents() = this.lines()
+            .map { it.trimStart() }
+            .dropWhile { it.isBlank() }
+            .dropLastWhile { it.isBlank() }
+            .joinToString("\n")
+
+
+    class Task5Test : StageTest<OutputClue>() {
+
+        override fun generate() = listOf(
+                outputCase(
+                        """
+                            spot_by_color yellow
+                            create 4
+                            park KA-01-HH-9999 White
+                            park KA-01-HH-3672 White
+                            park Rs-P-N-21 Red
+                            park Rs-P-N-22 Red
+                            reg_by_color GREEN
+                            reg_by_color WHITE
+                            spot_by_color GREEN
+                            spot_by_color red
+                            spot_by_reg ABC
+                            spot_by_reg KA-01-HH-3672
+                            spot_by_reg Rs-P-N-21
+                            exit
+                        """.trimAllIndents(),
+                        """
+                            Sorry, a parking lot has not been created.
+                            Created a parking lot with 4 spots.
+                            White car parked in spot 1.
+                            White car parked in spot 2.
+                            Red car parked in spot 3.
+                            Red car parked in spot 4.
+                            No cars with color GREEN were found.
+                            KA-01-HH-9999, KA-01-HH-3672
+                            No cars with color GREEN were found.
+                            3, 4
+                            No cars with registration number ABC were found.
+                            2
+                            3
+                """.trimAllIndents(),
+                        hint = "See example 1."
+                ),
+                outputCase(
+                        """
+                            spot_by_color yellow
+                            reg_by_color yellow
+                            spot_by_reg yellow
+                            exit
+                        """.trimAllIndents(),
+                        """
+                            Sorry, a parking lot has not been created.
+                            Sorry, a parking lot has not been created.
+                            Sorry, a parking lot has not been created.
+                """.trimAllIndents(),
+                        isPrivate = true,
+                        hint = "Check commands until the parking is created."
+                ),
+                outputCase(
+                        """
+                            create 5
+                            park A AA
+                            park B BB
+                            park C BB
+                            park D AA
+                            park E AA
+                            leave 4
+                            reg_by_color aa
+                            reg_by_color bb
+                            reg_by_color zz
+                            spot_by_color aa
+                            spot_by_color bb
+                            spot_by_color zz
+                            spot_by_reg A
+                            spot_by_reg B
+                            spot_by_reg Z
+                            exit
+                        """.trimAllIndents(),
+                        """
+                            Created a parking lot with 5 spots.
+                            AA car parked in spot 1.
+                            BB car parked in spot 2.
+                            BB car parked in spot 3.
+                            AA car parked in spot 4.
+                            AA car parked in spot 5.
+                            Spot 4 is free.
+                            A, E
+                            B, C
+                            No cars with color zz were found.
+                            1, 5
+                            2, 3
+                            No cars with color zz were found.
+                            1
+                            2
+                            No cars with registration number Z were found.
+                """.trimAllIndents(),
+                        isPrivate = true,
+                        hint = "Check the case, when the parking is not full."
+                )
+
+        )
+
+        override fun check(reply: String, clue: OutputClue): CheckResult {
+            return clue.compareLines(reply)
+        }
+    }
+  learner_created: false
+- name: src/parking/controller/Controller.kt
+  visible: true
+  text: |-
+    package parking
+
+    class Controller {
+        private val parking = ParkingService()
+
+        fun getControllerResponce(input: String): String {
+            val parseResponse = parseNumberFunction(input)
+            return handleParseResponce(parseResponse)
+        }
+
+        private fun handleParseResponce(parseResponse: ParseResultMessage): String {
+            // 1) if parking is not created
+            if (!parking.isCreated()) {
+                return "Sorry, a parking lot has not been created."
+            }
+            // 2) if park
+            if (parseResponse.parseStatus == ParseStatus.PARK) {
+                val parkingResponce = parking.park(parseResponse)
+
+                return if (parkingResponce.transactionResult == TransactionResult.DONE) {
+                    "${parseResponse.carColor.capitalize()} car parked in spot ${parkingResponce.lot}."
+                } else {
+                    "Sorry, the parking lot is full."
+                }
+            // 3) if leave
+            } else if (parseResponse.parseStatus == ParseStatus.LEAVE) {
+                val parkingResponce = parking.leave(parseResponse.leaveSpot)
+                return if (parkingResponce) {
+                    "Spot ${parseResponse.leaveSpot} is free."
+                } else {
+                    "There is no car in spot ${parseResponse.leaveSpot}."
+                }
+            }
+            return "ERROR! No responce"
+        }
+
+        fun create(numberOfSpots: Int): String {
+            val result = parking.create(numberOfSpots)
+            return if (result) {
+                "Created a parking lot with $numberOfSpots spots."
+            } else {
+                "Sorry, a parking lot has not been created."
+            }
+        }
+
+        fun status(): String = parking.status()
+
+    }
+  learner_created: true
+- name: src/parking/view/UI.kt
+  visible: true
+  text: |-
+    package parking
+
+    class UI {
+        private val controller: Controller = Controller()
+
+        fun start() {
+            var input = readLine()!!.toString()
+            var inputLineList = input.split(" ")
+
+            while (!inputLineList[0].equals("exit", true)) {
+                // menu
+                when (inputLineList[0].toLowerCase()) {
+                    "create" -> printResponce(controller.create(inputLineList[1].toInt()))
+                    "status" -> printResponce(controller.status())
+                    else -> printResponce(controller.getControllerResponce(input))
+                }
+
+                input = readLine()!!.toString()
+                inputLineList = input.split(" ")
+            }
+        }
+
+        private fun printResponce(response: String) {
+            println(response)
+        }
+    }
+  learner_created: true
+- name: src/parking/model/ParkingService.kt
+  visible: true
+  text: |-
+    package parking
+
+    import java.util.concurrent.locks.Lock
+    import java.util.concurrent.locks.ReentrantLock
+
+    interface ParkingInterface {
+        fun park(parseNumberMessage: ParseResultMessage): ParkingResponceMessage
+        fun leave(lot: Int): Boolean
+        fun isEmpty(): Boolean
+        fun create(numberOfSpots: Int): Boolean
+        fun isCreated(): Boolean
+        fun status(): String
+    }
+
+    enum class ParkingStatus {
+        FREE, OCCUPIED
+    }
+
+    enum class TransactionResult {
+        DONE, NO_AVAILABLE_SPOTS
+    }
+
+    // dto
+    data class ParkingResponceMessage(
+        val transactionResult: TransactionResult,
+        val lot: Int = 0,
+    )
+
+    data class Spot(
+        val parkingStatus: ParkingStatus,
+        val carNumber: String = "",
+        val carColor: String = ""
+    )
+
+    class ParkingService: ParkingInterface {
+
+        private val spots = mutableMapOf<Int, Spot>()
+        @Volatile
+        private var isCreated: Boolean = false
+
+        // ref counter
+        @Volatile
+        private var occupied: Int = 0
+
+        private val lock: Lock = ReentrantLock()
+
+        init {
+        }
+
+        override fun park(parseNumberMessage: ParseResultMessage): ParkingResponceMessage {
+            synchronized(lock) {
+                for(lot in spots) {
+                    if (lot.value.parkingStatus == ParkingStatus.FREE) {
+                        spots[lot.key] = Spot(
+                            parkingStatus = ParkingStatus.OCCUPIED,
+                            carNumber = parseNumberMessage.carNumber,
+                            carColor = parseNumberMessage.carColor
+                        )
+
+                        ++occupied
+
+                        return ParkingResponceMessage(
+                            transactionResult = TransactionResult.DONE,
+                            lot = lot.key
+                        )
+
+                    }
+                }
+            }
+
+            return ParkingResponceMessage(
+                transactionResult = TransactionResult.NO_AVAILABLE_SPOTS
+            )
+        }
+
+        override fun leave(lot: Int): Boolean {
+            synchronized(lock) {
+                if (spots[lot]?.parkingStatus != ParkingStatus.FREE) {
+                    spots[lot] = Spot(
+                        parkingStatus = ParkingStatus.FREE,
+                    )
+                    --occupied
+                    return true
+                }
+                return false
+            }
+        }
+
+        override fun isEmpty(): Boolean {
+            synchronized(lock) {
+                return occupied == 0
+            }
+        }
+
+        override fun create(numberOfSpots: Int): Boolean {
+            synchronized(lock) {
+                // check if no positive
+                if (numberOfSpots < 1) {
+                    return false
+                }
+
+                spots.clear()
+                occupied = 0
+
+                for (i in 1..numberOfSpots) {
+                    spots[i] = Spot(
+                        parkingStatus = ParkingStatus.FREE
+                    )
+                }
+                isCreated = true
+                return true
+            }
+        }
+
+        override fun isCreated(): Boolean {
+            synchronized(lock) {
+                return isCreated
+            }
+        }
+
+        override fun status(): String {
+            if (!isCreated) {
+                return "Sorry, a parking lot has not been created."
+            }
+            if (isEmpty()) {
+                return "Parking lot is empty."
+            }
+            val builder = StringBuilder()
+            spots.filter { it.value.parkingStatus != ParkingStatus.FREE }
+                .forEach {
+                    builder.append("${it.key} ${it.value.carNumber} ${it.value.carColor}\n")
+                }
+            return builder.toString().trim()
+        }
+    }
+  learner_created: true
+- name: src/parking/model/CarNumberParser.kt
+  visible: true
+  text: |-
+    package parking
+
+    class CarNumberParser {
+    }
+
+    enum class ParseStatus {
+        ERROR, PARK, LEAVE
+    }
+
+    // DTO
+    data class ParseResultMessage(
+        val parseStatus: ParseStatus,
+        val carColor: String = "",
+        val carNumber: String = "",
+        val leaveSpot: Int = 0
+    )
+
+    fun parseNumberFunction(str: String): ParseResultMessage {
+        val parkRegex = "park*".toRegex()
+        val leaveRegex = "leave*".toRegex()
+
+        val listNumber = str.split(" ")
+
+        if (listNumber[0].matches(parkRegex)) {
+            return ParseResultMessage(
+                parseStatus = ParseStatus.PARK,
+                carColor = listNumber[2],
+                carNumber = listNumber[1])
+        }
+
+        if (listNumber[0].matches(leaveRegex)) {
+            return ParseResultMessage(
+                parseStatus = ParseStatus.LEAVE,
+                leaveSpot = listNumber[1].toInt())
+        }
+
+        return ParseResultMessage(ParseStatus.ERROR)
+    }
+  learner_created: true
+feedback_link: https://hyperskill.org/learn/step/6601#comment
+status: Solved
+feedback:
+  message: Well done! You've finished the project. Select a new project on <a href="https://hyperskill.org/projects">JetBrains
+    Academy</a> to continue learning.
+  time: Tue, 30 Nov 2021 19:32:55 UTC
+record: -1
