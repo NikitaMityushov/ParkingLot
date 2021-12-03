@@ -1,16 +1,7 @@
 package parking.model
 
-enum class ParseStatus {
-    ERROR, PARK, LEAVE
-}
-
-// DTO
-data class ParseResultMessage(
-    val parseStatus: ParseStatus,
-    val carColor: String = "",
-    val carNumber: String = "",
-    val leaveSpot: Int = 0
-)
+import parking.model.messages.ParseResultMessage
+import parking.model.messages.ParseStatus
 
 fun parseNumberFunction(str: String): ParseResultMessage {
     val parkRegex = "park*".toRegex()

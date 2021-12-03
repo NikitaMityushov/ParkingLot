@@ -1,13 +1,20 @@
 package parking.controller
 
 import parking.model.*
+import parking.model.messages.ParseResultMessage
+import parking.model.messages.ParseStatus
+import parking.model.messages.TransactionResponce
+import parking.resources.Strings
+import parking.resources.Strings.Companion.PARKING_IS_FULL
+import parking.resources.Strings.Companion.PARKING_IS_NOT_CREATED
+import java.util.*
 
+/**
+ * Represents controller in MVC app architecture
+ *
+ */
 class Controller {
-    companion object {
-        // Strings
-        private const val PARKING_IS_NOT_CREATED = "Sorry, a parking lot has not been created."
-        private const val PARKING_IS_FULL = "Sorry, the parking lot is full."
-    }
+
     private val parking = ParkingService()
 
     fun getControllerResponce(input: String): String {
@@ -24,8 +31,8 @@ class Controller {
         if (parseResponse.parseStatus == ParseStatus.PARK) {
             val parkingResponce = parking.park(parseResponse)
 
-            return if (parkingResponce.transactionResult == TransactionResult.DONE) {
-                "${parseResponse.carColor.capitalize()} car parked in spot ${parkingResponce.lot}."
+            return if (parkingResponce.transactionResponce == TransactionResponce.DONE) {
+                "${parseResponse.carColor.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }} car parked in spot ${parkingResponce.lot}."
             } else {
                 PARKING_IS_FULL
             }
@@ -33,7 +40,7 @@ class Controller {
         } else if (parseResponse.parseStatus == ParseStatus.LEAVE) {
             val parkingResponce = parking.leave(parseResponse.leaveSpot)
             return if (parkingResponce) {
-                "Spot ${parseResponse.leaveSpot} is free."
+                "parking.model.Spot ${parseResponse.leaveSpot} is free."
             } else {
                 "There is no car in spot ${parseResponse.leaveSpot}."
             }
@@ -92,6 +99,10 @@ class Controller {
         }
 
         return "No cars with registration number $carNumber were found."
+    }
+
+    fun info(): String {
+        return Strings.INFO_CONTENT
     }
 
     private fun <T> buildStringResponce(response: List<T>): String {

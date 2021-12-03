@@ -1,61 +1,46 @@
 package parking.model
 
+import parking.model.interfaces.ParkingInterface
+import parking.model.messages.ParkingResponceMessage
+import parking.model.messages.ParseResultMessage
+import parking.model.messages.TransactionResponce
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.Lock
 import java.util.concurrent.locks.ReentrantLock
 
-interface ParkingInterface {
-    fun park(parseNumberMessage: ParseResultMessage): ParkingResponceMessage
-    fun leave(lot: Int): Boolean
-    fun isEmpty(): Boolean
-    fun create(numberOfSpots: Int): Boolean
-    fun isCreated(): Boolean
-    fun status(): String
-    fun regByColor(color: String): List<String>
-    fun spotByColor(color: String): List<Int>
-    fun spotByReg(carNumber: String): List<Int>
-}
-
-enum class ParkingStatus {
-    FREE, OCCUPIED
-}
-
-enum class TransactionResult {
-    DONE, NO_AVAILABLE_SPOTS
-}
-
-// dto
-data class ParkingResponceMessage(
-    val transactionResult: TransactionResult,
-    val lot: Int = 0,
-)
-
-data class Spot(
-    val parkingStatus: ParkingStatus,
-    val carNumber: String = "",
-    val carColor: String = ""
-)
-
+/**
+ * Parking service, extends ParkingInterface
+ *
+ */
 class ParkingService: ParkingInterface {
+    /**
+     * Represents a map of spots numbers and spots itself
+     */
+    private val spots = ConcurrentHashMap<Int, Spot>()
 
-    private val spots = mutableMapOf<Int, Spot>()
+    /**
+     * Represents flag for checking of ParkingService creation
+     */
     @Volatile
     private var isCreated: Boolean = false
-
     // ref counter
+    /**
+     * Represents number of occupied spots
+     */
     @Volatile
     private var occupied: Int = 0
 
+    /**
+     * Standard lock for synchronization
+     */
     private val lock: Lock = ReentrantLock()
-
-    init {
-    }
 
     override fun park(parseNumberMessage: ParseResultMessage): ParkingResponceMessage {
         synchronized(lock) {
             for(lot in spots) {
-                if (lot.value.parkingStatus == ParkingStatus.FREE) {
+                if (lot.value.spotStatus == SpotStatus.FREE) {
                     spots[lot.key] = Spot(
-                        parkingStatus = ParkingStatus.OCCUPIED,
+                        spotStatus = SpotStatus.OCCUPIED,
                         carNumber = parseNumberMessage.carNumber,
                         carColor = parseNumberMessage.carColor
                     )
@@ -63,7 +48,7 @@ class ParkingService: ParkingInterface {
                     ++occupied
 
                     return ParkingResponceMessage(
-                        transactionResult = TransactionResult.DONE,
+                        transactionResponce = TransactionResponce.DONE,
                         lot = lot.key
                     )
 
@@ -72,15 +57,15 @@ class ParkingService: ParkingInterface {
         }
 
         return ParkingResponceMessage(
-            transactionResult = TransactionResult.NO_AVAILABLE_SPOTS
+            transactionResponce = TransactionResponce.NO_AVAILABLE_SPOTS
         )
     }
 
     override fun leave(lot: Int): Boolean {
         synchronized(lock) {
-            if (spots[lot]?.parkingStatus != ParkingStatus.FREE) {
+            if (spots[lot]?.spotStatus != SpotStatus.FREE) {
                 spots[lot] = Spot(
-                    parkingStatus = ParkingStatus.FREE,
+                    spotStatus = SpotStatus.FREE,
                 )
                 --occupied
                 return true
@@ -107,7 +92,7 @@ class ParkingService: ParkingInterface {
 
             for (i in 1..numberOfSpots) {
                 spots[i] = Spot(
-                    parkingStatus = ParkingStatus.FREE
+                    spotStatus = SpotStatus.FREE
                 )
             }
             isCreated = true
@@ -129,7 +114,7 @@ class ParkingService: ParkingInterface {
             return "Parking lot is empty."
         }
         val builder = StringBuilder()
-        spots.filter { it.value.parkingStatus != ParkingStatus.FREE }
+        spots.filter { it.value.spotStatus != SpotStatus.FREE }
             .forEach {
                 builder.append("${it.key} ${it.value.carNumber} ${it.value.carColor}\n")
             }
@@ -172,3 +157,5 @@ class ParkingService: ParkingInterface {
         return response
     }
 }
+
+// TODO: 01.12.2021 (Make full thread safe)
