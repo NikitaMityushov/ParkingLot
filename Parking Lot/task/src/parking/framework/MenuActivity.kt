@@ -1,7 +1,6 @@
 package parking.framework
 
 import parking.resources.Strings
-
 /**
  * Represents Template Method Design Pattern
  */
